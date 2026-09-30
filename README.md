@@ -1,144 +1,95 @@
-# Microbiome food-reference analysis in R
+# Microbiome analysis code — Nitin Bansal
 
-An analysis example adapted from my doctoral work on host-associated microbial communities. The workflow compares Generation 0 larval and adult-female communities with a shared food/source reference, accounting for the experimental sampling structure.
+Four R scripts from doctoral research on how host mitochondrial and nuclear
+genotypes and developmental stage shape the Drosophila microbiome across generations.
+The scripts show data subsetting, biological replicate aggregation, community
+comparisons, statistical models, and figure and table generation.
 
-**Author:** Nitin Bansal, PhD  
-**Main tools:** phyloseq, vegan, ggplot2, dplyr, car, emmeans, and openxlsx.
+**Data status:** The processed research dataset is not included at present.
+These files are shared as code examples for review. They require the original
+phyloseq input to run; there is no demo dataset or demo command in this package.
 
-## What the code demonstrates
+## Scripts
 
-- Validating sequencing counts and sample metadata before analysis.
-- Averaging relative-abundance profiles from multiple host pools within each experimental vial.
-- Calculating Bray-Curtis dissimilarity to a shared mean food/source profile.
-- Comparing developmental stage and mitochondrial-nuclear genotype with linear models.
-- Inspecting model diagnostics, testing variance differences, and documenting limitations.
-- Exporting figures, source data, model tables, and reproducibility information.
+| File | Question and analysis | Main outputs |
+|---|---|---|
+| `02_generation_divergence.R` | How does oreore community composition change across generations? Vial means, Bray–Curtis distance to stage-specific Gen0/Gen1 mean profiles, PERMANOVA, dispersion checks, and linear models. | Figure 2, supplementary Table S2, source CSVs |
+| `03_genus_trajectories.R` | Which bacterial genera change across generations and replicate vials? Dominant genera and an abundance-filtered genus view. | Figure 3, supplementary Figure S3, source CSVs |
+| `04_mitonuclear_divergence.R` | Does Gen5 divergence from Gen0 differ by mitochondrial genotype, nuclear background, and stage? PCoA, PERMANOVA, vial-intercept mixed models, contrasts, and a vial-mean sensitivity analysis. | Figure 4, supplementary Figures S2/S5, Table S3 |
+| `05_genus_abundance_changes.R` | Which genera contribute to Gen0-to-Gen5 changes? Vial-level abundance differences and per-genus interaction models with BH correction. | Figure 5, supplementary Figure S4, Table S4 |
 
-This example starts with **processed ASV counts and taxonomy**. It does not perform raw-read processing, DADA2 inference, shotgun metagenomics, or machine-learning training.
+Each script is independent and reads the same input. Numbers correspond to the
+research figures, not a required execution order. These scripts start from a
+processed phyloseq object; sequencing preprocessing and ASV inference are upstream.
 
-## Quick start
+## Required input
 
-Install R 4.1 or later. Download this repository and open its folder as the working directory. In a terminal, run:
+The default path is `data/06_phyloseq_clean_CHAP1_NOHOST.rds`. Add that file when
+available, or edit `INPUT_RDS` at the top of each script. The RDS must contain a
+phyloseq object with an ASV abundance table and sample metadata. The genus scripts
+also require `Genus` and `Family` taxonomy ranks.
 
-```bash
-Rscript scripts/install_packages.R
-Rscript scripts/analyze_food_reference.R --demo
-Rscript scripts/check_demo_outputs.R
-```
+| Metadata field | Values used by these scripts |
+|---|---|
+| `genotype` | `oreore`, `simore`, `oreaut`, `simaut` |
+| `generation` | `Generation_0` through `Generation_5` |
+| `life_stage` | `Larvae`, `Female`; `food` is additionally used in the trajectory script |
+| `vial` | Replicate lineage/vial identifier; trajectory panels expect `Vial_1`, `Vial_2`, `Vial_3` |
+| `replicate` | Pool identifier, required by `02_generation_divergence.R` |
 
-The first command installs the required R packages, including phyloseq through Bioconductor. Package installation requires internet access and, on some systems, development libraries for package compilation.
+The study must include the relevant baseline and follow-up groups. Missing metadata,
+unbalanced cells, and repeated lineage identifiers need scientific review before reuse.
 
-Alternatively, in RStudio with the repository folder as the working directory:
+## Packages
+
+Use R with `phyloseq`, `dplyr`, `tidyr`, `tibble`, `vegan`, `ggplot2`, `readr`,
+`patchwork`, `openxlsx`, `stringr`, `forcats`, `scales`, `emmeans`, `nlme`, and `car`.
+The plots use the `linewidth` argument supported by ggplot2 3.4.0 and later.
+Each script checks its own dependencies. `car` is used through `car::` to avoid
+masking `dplyr::recode()`.
+
+For a fresh R environment:
 
 ```r
-source("scripts/install_packages.R")
-system2(file.path(R.home("bin"), "Rscript"),
-        c("scripts/analyze_food_reference.R", "--demo"))
-source("scripts/check_demo_outputs.R")
+install.packages(c("dplyr", "tidyr", "tibble", "vegan", "ggplot2", "readr",
+                   "patchwork", "openxlsx", "stringr", "forcats", "scales",
+                   "emmeans", "nlme", "car"))
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install("phyloseq")
 ```
 
-The bundled demonstration has **80 simulated samples and 12 illustrative taxa**: eight food samples and 72 host pools that collapse to 24 host vials. Counts and sample IDs are synthetic; the genus and genotype labels illustrate the categories used by the analysis. Demonstration statistics are not research findings.
+## Running after the input is available
 
-**Validation status:** the source and synthetic input structure have been checked statically, and the reference-distance calculations have been independently checked in Python. R and the original research RDS were unavailable in the preparation environment, so the R workflow has not yet been executed there. Run the demonstration and output checks in R before relying on this example or publishing it as a tested workflow.
+Set the working directory to this folder, which contains `README.md` and the four
+R scripts. Then run a script from RStudio with Source, or from a terminal:
 
-## Analyze a research phyloseq object
-
-```bash
-Rscript scripts/analyze_food_reference.R \
-  --input data/private/your_processed_phyloseq.rds \
-  --output outputs/research
+```sh
+Rscript 02_generation_divergence.R
+Rscript 03_genus_trajectories.R
+Rscript 04_mitonuclear_divergence.R
+Rscript 05_genus_abundance_changes.R
 ```
 
-Use a fresh output directory. Reusing a nonempty directory requires the explicit `--overwrite` option. Existing output files with matching names will then be replaced; unrelated files are retained.
+Outputs are written under `outputs/` into separate figure-specific folders. They
+include figures, source tables, statistics, a copy of the processed input, and
+`sessionInfo.txt`. Existing outputs with the same names can be overwritten. The
+PDF device uses Cairo when available and the standard PDF device otherwise.
 
-The phyloseq object must contain:
+## Interpretation and validation status
 
-| Component | Required content |
-|---|---|
-| OTU table | Finite, nonnegative, untransformed integer ASV counts; either table orientation is supported |
-| Taxonomy | `Genus` and `Family` columns, with taxon IDs matching the OTU table |
-| Sample metadata | `genotype`, `generation`, `life_stage`, `vial`, and `replicate` |
+These are research scripts for a specific study design. The models and filtering
+choices are retained from the original analyses, with the corrections listed in
+`CHANGES.md`. Bray–Curtis references are arithmetic mean relative-abundance
+profiles; the original figure labels use the word “centroid.” They are not PCoA
+centroids. Genus abundance changes describe relative proportions, not absolute
+bacterial quantities or a dedicated compositional differential-abundance test.
 
-Metadata values are case-sensitive:
+The source was reviewed and checked for balanced delimiters and portable paths.
+The revised scripts have **not been executed in R** during this cleanup because
+R and the processed research input were unavailable. Figures and statistics must
+be regenerated and compared before the revised outputs are used in a manuscript.
+The original free-permutation design and model assumptions also need review, as
+explained in `CHANGES.md`.
 
-- `genotype`: `oreore`, `simore`, `oreaut`, or `simaut`.
-- `generation`: `Generation_0` for the host samples included here.
-- `life_stage`: `food`, `Larvae`, or `Female`.
-- `vial`: a biological-vial identifier within genotype, generation, and stage.
-- `replicate`: a pool/sample identifier. Multiple host pools in a vial are averaged before analysis.
-
-Food samples are selected by life stage and genotype, regardless of their generation label. Confirm that they are the intended source/reference samples. Each food sample is treated as an independent source observation in PERMANOVA; shared genotype/vial labels generate a warning and require review of the sampling design.
-
-## Analysis choices and limitations
-
-### Reference and experimental unit
-
-Each retained sample is converted to relative abundance after zero-count samples are removed. Host-pool profiles are averaged equally within each vial. The food reference is the arithmetic mean of the retained food-sample relative-abundance profiles, with equal weight per source sample. It is a **mean composition in ASV space**, rather than a centroid from a PCoA embedding.
-
-Bray-Curtis distances to that reference describe compositional divergence. They do not establish transmission from food, absolute bacterial growth, or a causal mechanism. Models condition on the estimated reference; uncertainty in the food reference is not propagated.
-
-The linear models assume independent host vials. If larval and adult observations share the same biological vial, lineage, or another repeated-measure unit, that dependence must be represented in an appropriate model. The current metadata labels alone do not establish independence.
-
-### Statistical models
-
-The genotype model is `distance_to_food ~ stage_label * genotype_label`. A second parameterization is `distance_to_food ~ stage_label * Mito * Nuclear`. With a complete two-by-two genetic design and all interactions, these describe the same stage-by-genotype cell means; they are not independent confirmations of a result.
-
-`anova(lm(...))` supplies sequential Type I sums of squares. Term order matters for an unbalanced design. The exported omnibus model p-values are unadjusted and the analyses are exploratory. Inspect the interactions and the cell sizes before interpreting main effects.
-
-Two post-hoc contrast families are exported with raw and Benjamini-Hochberg-adjusted p-values:
-
-1. Stage comparisons across all four genotypes: four contrasts.
-2. Genotype comparisons across both stages: twelve contrasts.
-
-Median-centered Levene tests are calculated for stage, genotype, and the eight stage-by-genotype cells. These assess variance in the scalar reference-distance response, whereas PERMDISP assesses multivariate dispersion. The source PERMDISP test is skipped if any genotype has fewer than three source observations. Source PERMANOVA is retained, but a nonsignificant result with small groups does not demonstrate equivalent source communities.
-
-The response is bounded between zero and one. Linear-model residual, Q-Q, variance, and influence plots are exported for inspection. Variance-test results do not automatically select or validate a model; interpretation requires reviewing diagnostics and the sampling design.
-
-### Composition plot
-
-Taxa lacking a genus annotation are retained and labeled `Unclassified: FAMILY` or `Unclassified`. The ten most abundant displayed genera are shown separately; remaining labels are combined as `Other`.
-
-No genus is removed by default. If a justified display exclusion is needed:
-
-```bash
-Rscript scripts/analyze_food_reference.R --demo \
-  --exclude-genus Gardnerella --output outputs/demo_filtered
-```
-
-This option affects the food-composition plot and its source data, which are renormalized after exclusion. It does not remove ASVs from the reference-distance analysis. An exclusion needs a documented scientific reason; a taxon name alone does not establish contamination.
-
-## Outputs
-
-Outputs are saved under `outputs/demo/` or the requested directory:
-
-- `figure_files/`: composition and reference-distance plots as PDF, PNG, and JPEG.
-- `figure_source_data/`: plotted compositions and vial-level host distances.
-- `statistics/`: ANOVA/variance-test tables, post-hoc contrasts, source PERMANOVA, model-diagnostic PDF, QC counts, full text results, and `sessionInfo.txt`.
-- `input_processed/`: a processed input snapshot, selected metadata, and command options.
-- `code/`: the analysis-script snapshot used for the run.
-
-The distance-plot p-value is generated from the fitted model. A fixed random seed makes permutation tests and plotted jitter reproducible within a compatible package environment; installed versions are recorded in `sessionInfo.txt`. This repository does not yet include a tested dependency lockfile.
-
-Research `.rds` files and generated outputs are excluded by `.gitignore`. The synthetic CSV inputs are included so the public example does not require unpublished research data. Review the actual files selected for upload when using GitHub's browser uploader.
-
-## Changes from the research script
-
-- Replaced the lab-specific `setwd()` and fixed input filename with command-line input/output options.
-- Added a synthetic CSV demonstration and explicit input checks.
-- Removed zero-count samples before normalization.
-- Calculated the figure annotation from the fitted model.
-- Required statistical packages instead of substituting Bartlett's test for Levene's test or omitting contrasts.
-- Added explicit BH correction across each stated contrast family.
-- Added residual diagnostics and a variance check across all stage-by-genotype cells.
-- Preserved unclassified taxa in the composition plot and made genus exclusion optional.
-- Skipped poorly supported source-dispersion tests and recorded the reason.
-
-These changes improve portability and make analysis decisions explicit. They do not verify the original empirical results; run and review the adapted workflow on the research input separately before using it for a manuscript.
-
-## Method documentation
-
-- [phyloseq data import](https://joey711.github.io/phyloseq/import-data.html)
-- [vegan dispersion analysis](https://vegandevs.github.io/vegan/reference/betadisper.html)
-- [R linear-model ANOVA](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/anova.lm.html)
-- [car Levene test](https://rdrr.io/cran/car/man/leveneTest.html)
-- [emmeans multiplicity and grouped comparisons](https://rvlenth.github.io/emmeans/articles/confidence-intervals.html)
+Author: Nitin Bansal. Research code edited for sharing with assistance; substantive
+corrections and remaining limitations are documented in `CHANGES.md`.
